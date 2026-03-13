@@ -5,8 +5,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import CoffeeShop, ShopAmenity, ShopPurpose, ShopSpace, ShopStatus
+from app.models import CoffeeShop, ShopAmenity, ShopPurpose, ShopSpace, ShopStatus, ShopDrink, ShopSuggestion
 from app.schemas import CoffeeShopCreate, CoffeeShopUpdate
+from app.utils import is_shop_open_now
 
 
 def _slugify(text: str) -> str:
@@ -48,15 +49,35 @@ async def get_shops(
     space: Optional[list[str]] = None,
     amenity: Optional[list[str]] = None,
     status: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
     page: int = 1,
     limit: int = 30,
 ) -> tuple[list[CoffeeShop], int]:
     """Get shops with filters and pagination."""
-    query = select(CoffeeShop).options(
-        selectinload(CoffeeShop.purposes),
-        selectinload(CoffeeShop.spaces),
-        selectinload(CoffeeShop.amenities),
-    )
+    distance_expr = None
+    if lat is not None and lon is not None:
+        distance_expr = (
+            6371 * func.acos(
+                func.cos(func.radians(lat)) * func.cos(func.radians(CoffeeShop.latitude)) *
+                func.cos(func.radians(CoffeeShop.longitude) - func.radians(lon)) +
+                func.sin(func.radians(lat)) * func.sin(func.radians(CoffeeShop.latitude))
+            )
+        ).label('distance_km')
+        query = select(CoffeeShop, distance_expr).options(
+            selectinload(CoffeeShop.purposes),
+            selectinload(CoffeeShop.spaces),
+            selectinload(CoffeeShop.amenities),
+            selectinload(CoffeeShop.drinks),
+        )
+    else:
+        query = select(CoffeeShop).options(
+            selectinload(CoffeeShop.purposes),
+            selectinload(CoffeeShop.spaces),
+            selectinload(CoffeeShop.amenities),
+            selectinload(CoffeeShop.drinks),
+        )
+        
     count_query = select(func.count(func.distinct(CoffeeShop.id)))
 
     # Apply search filter (Searching name, address, and district)
@@ -75,7 +96,7 @@ async def get_shops(
         query = query.where(district_filter)
         count_query = count_query.where(district_filter)
 
-    if status:
+    if status and status not in ("open", "closed_temp"):
         query = query.where(CoffeeShop.status == status)
         count_query = count_query.where(CoffeeShop.status == status)
 
@@ -106,16 +127,58 @@ async def get_shops(
             .where(ShopAmenity.amenity.in_(amenity))
         )
 
+    # For dynamic status, we must fetch all matching records, filter in Python, then slice
+    if status in ("open", "closed_temp"):
+        if distance_expr is not None:
+            query = query.order_by(distance_expr.asc().nulls_last(), CoffeeShop.created_at.desc())
+        else:
+            query = query.order_by(CoffeeShop.created_at.desc())
+
+        result = await db.execute(query)
+        if distance_expr is not None:
+            rows = result.unique().all()
+            all_shops = []
+            for shop, dist in rows:
+                shop.distance_km = dist
+                all_shops.append(shop)
+        else:
+            all_shops = result.unique().scalars().all()
+
+        filtered_shops = []
+        for shop in all_shops:
+            is_open = is_shop_open_now(shop.opening_hours)
+            if status == "open" and is_open:
+                filtered_shops.append(shop)
+            elif status == "closed_temp" and not is_open:
+                filtered_shops.append(shop)
+
+        total = len(filtered_shops)
+        offset = (page - 1) * limit
+        shops = filtered_shops[offset:offset + limit]
+
+        return shops, total
+
+    # Regular flow without dynamic status
     # Get total count
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
     # Apply pagination
     offset = (page - 1) * limit
-    query = query.order_by(CoffeeShop.created_at.desc()).offset(offset).limit(limit)
+    if distance_expr is not None:
+        query = query.order_by(distance_expr.asc().nulls_last(), CoffeeShop.created_at.desc()).offset(offset).limit(limit)
+    else:
+        query = query.order_by(CoffeeShop.created_at.desc()).offset(offset).limit(limit)
 
     result = await db.execute(query)
-    shops = result.unique().scalars().all()
+    if distance_expr is not None:
+        rows = result.unique().all()
+        shops = []
+        for shop, dist in rows:
+            shop.distance_km = dist
+            shops.append(shop)
+    else:
+        shops = result.unique().scalars().all()
 
     return shops, total
 
@@ -128,6 +191,7 @@ async def get_shop_by_id(db: AsyncSession, shop_id: int) -> Optional[CoffeeShop]
             selectinload(CoffeeShop.purposes),
             selectinload(CoffeeShop.spaces),
             selectinload(CoffeeShop.amenities),
+            selectinload(CoffeeShop.drinks),
         )
         .where(CoffeeShop.id == shop_id)
     )
@@ -143,6 +207,7 @@ async def get_shop_by_slug(db: AsyncSession, slug: str) -> Optional[CoffeeShop]:
             selectinload(CoffeeShop.purposes),
             selectinload(CoffeeShop.spaces),
             selectinload(CoffeeShop.amenities),
+            selectinload(CoffeeShop.drinks),
         )
         .where(CoffeeShop.slug == slug)
     )
@@ -193,6 +258,14 @@ async def create_shop(db: AsyncSession, shop_data: CoffeeShopCreate) -> CoffeeSh
         shop.spaces.append(ShopSpace(space_type=s))
     for a in shop_data.amenities:
         shop.amenities.append(ShopAmenity(amenity=a))
+    for d in shop_data.drinks:
+        shop.drinks.append(ShopDrink(
+            name=d.name, 
+            price=d.price,
+            category=d.category,
+            is_signature=d.is_signature,
+            is_trending=d.is_trending
+        ))
 
     db.add(shop)
     await db.commit()
@@ -216,6 +289,7 @@ async def update_shop(
     purposes = update_data.pop("purposes", None)
     spaces = update_data.pop("spaces", None)
     amenities = update_data.pop("amenities", None)
+    drinks = update_data.pop("drinks", None)
 
     # Update simple fields
     for key, value in update_data.items():
@@ -241,6 +315,19 @@ async def update_shop(
         for a in shop.amenities:
             await db.delete(a)
         shop.amenities = [ShopAmenity(amenity=a) for a in amenities]
+
+    if drinks is not None:
+        for d in shop.drinks:
+            await db.delete(d)
+        shop.drinks = [
+            ShopDrink(
+                name=d["name"], 
+                price=d.get("price"),
+                category=d.get("category", "drink"),
+                is_signature=d.get("is_signature", False),
+                is_trending=d.get("is_trending", False)
+            ) for d in drinks
+        ]
 
     await db.commit()
     return await get_shop_by_id(db, shop_id)
@@ -293,20 +380,121 @@ async def get_distinct_amenities(db: AsyncSession) -> list[str]:
 
 
 async def create_suggestion(
-    db: AsyncSession, suggestion_data: CoffeeShopCreate
-) -> CoffeeShop:
+    db: AsyncSession, suggestion_data: "ShopSuggestionCreate"
+) -> ShopSuggestion:
     """Create a new shop suggestion."""
-    from app.models import ShopSuggestion
+    import json
     
+    # Check if suggestion_data is actually ShopSuggestionCreate (which is same fields as CoffeeShopCreate now)
+    # We store arrays/objects in json_data
+    json_payload = {
+        "purposes": suggestion_data.purposes,
+        "spaces": suggestion_data.spaces,
+        "amenities": suggestion_data.amenities,
+        "drinks": [d.model_dump() for d in suggestion_data.drinks]
+    }
+
     suggestion = ShopSuggestion(
-        shop_name=suggestion_data.shop_name,
+        shop_id=getattr(suggestion_data, "shop_id", None),
+        shop_name=suggestion_data.shop_name if hasattr(suggestion_data, "shop_name") else suggestion_data.name,
         address=suggestion_data.address,
         district=suggestion_data.district,
+        phone=suggestion_data.phone,
+        image_url=suggestion_data.image_url,
+        description=suggestion_data.description,
+        opening_hours=suggestion_data.opening_hours,
+        price_range=suggestion_data.price_range,
+        json_data=json.dumps(json_payload),
         reason=suggestion_data.reason,
         contributor_name=suggestion_data.contributor_name,
         contributor_email=suggestion_data.contributor_email,
+        status="pending"
     )
     db.add(suggestion)
     await db.commit()
     await db.refresh(suggestion)
     return suggestion
+
+
+async def get_suggestions(
+    db: AsyncSession, status: Optional[str] = None
+) -> list[ShopSuggestion]:
+    """Get all suggestions."""
+    query = select(ShopSuggestion).order_by(ShopSuggestion.created_at.desc())
+    if status:
+        query = query.where(ShopSuggestion.status == status)
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+async def get_suggestion_by_id(db: AsyncSession, suggestion_id: int) -> Optional[ShopSuggestion]:
+    """Get a single suggestion by ID."""
+    query = select(ShopSuggestion).where(ShopSuggestion.id == suggestion_id)
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+
+
+async def approve_suggestion(db: AsyncSession, suggestion_id: int) -> Optional[CoffeeShop]:
+    """Approve a suggestion and create/update a shop."""
+    import json
+    from app.schemas import CoffeeShopCreate, CoffeeShopUpdate
+    
+    suggestion = await get_suggestion_by_id(db, suggestion_id)
+    if not suggestion or suggestion.status != "pending":
+        return None
+        
+    data = json.loads(suggestion.json_data or "{}")
+    
+    if suggestion.shop_id:
+        # Update existing shop
+        shop_update = CoffeeShopUpdate(
+            name=suggestion.shop_name,
+            address=suggestion.address,
+            district=suggestion.district,
+            phone=suggestion.phone,
+            image_url=suggestion.image_url,
+            description=suggestion.description,
+            opening_hours=suggestion.opening_hours,
+            price_range=suggestion.price_range,
+            purposes=data.get("purposes"),
+            spaces=data.get("spaces"),
+            amenities=data.get("amenities"),
+            drinks=data.get("drinks")
+        )
+        shop = await update_shop(db, suggestion.shop_id, shop_update)
+    else:
+        # Create new shop
+        shop_create = CoffeeShopCreate(
+            name=suggestion.shop_name,
+            address=suggestion.address,
+            district=suggestion.district,
+            phone=suggestion.phone,
+            image_url=suggestion.image_url,
+            description=suggestion.description,
+            opening_hours=suggestion.opening_hours,
+            price_range=suggestion.price_range,
+            status="new", # Mark as new so it appears in "New Shops" section
+            purposes=data.get("purposes", []),
+            spaces=data.get("spaces", []),
+            amenities=data.get("amenities", []),
+            drinks=data.get("drinks", [])
+        )
+        shop = await create_shop(db, shop_create)
+        
+    if shop:
+        suggestion.status = "approved"
+        await db.commit()
+        await db.refresh(suggestion)
+        
+    return shop
+
+
+async def reject_suggestion(db: AsyncSession, suggestion_id: int) -> bool:
+    """Reject a suggestion."""
+    suggestion = await get_suggestion_by_id(db, suggestion_id)
+    if not suggestion or suggestion.status != "pending":
+        return False
+        
+    suggestion.status = "rejected"
+    await db.commit()
+    return True

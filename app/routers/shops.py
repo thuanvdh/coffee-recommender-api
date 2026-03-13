@@ -33,9 +33,18 @@ def _shop_to_response(shop) -> CoffeeShopResponse:
         status=shop.status,
         latitude=shop.latitude,
         longitude=shop.longitude,
+        distance_km=getattr(shop, 'distance_km', None),
         purposes=[p.purpose for p in shop.purposes],
         spaces=[s.space_type for s in shop.spaces],
         amenities=[a.amenity for a in shop.amenities],
+        drinks=[{
+            "id": d.id, 
+            "name": d.name, 
+            "price": d.price,
+            "category": d.category,
+            "is_signature": d.is_signature,
+            "is_trending": d.is_trending
+        } for d in shop.drinks],
         created_at=shop.created_at,
         updated_at=shop.updated_at,
     )
@@ -49,6 +58,8 @@ async def list_shops(
     space: Optional[list[str]] = Query(None, description="Lọc theo không gian"),
     amenity: Optional[list[str]] = Query(None, description="Lọc theo tiện ích"),
     status: Optional[str] = Query(None, description="Lọc theo trạng thái"),
+    lat: Optional[float] = Query(None, description="Vĩ độ hiện tại"),
+    lon: Optional[float] = Query(None, description="Kinh độ hiện tại"),
     page: int = Query(1, ge=1, description="Trang"),
     limit: int = Query(25, ge=1, le=100, description="Số lượng mỗi trang"),
     db: AsyncSession = Depends(get_db),
@@ -62,6 +73,8 @@ async def list_shops(
         space=space,
         amenity=amenity,
         status=status,
+        lat=lat,
+        lon=lon,
         page=page,
         limit=limit,
     )

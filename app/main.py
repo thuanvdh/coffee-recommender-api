@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import shops, suggestions
+from app.routers import shops, suggestions, auth, admin as admin_router
 from app.database import engine
 from app.admin import CoffeeShopAdmin, PurposeAdmin, SpaceAdmin, AmenityAdmin, SuggestionAdmin, UserAdmin
 from sqladmin import Admin
@@ -27,6 +27,8 @@ app.add_middleware(
 # Include routers
 app.include_router(shops.router)
 app.include_router(suggestions.router)
+app.include_router(auth.router)
+app.include_router(admin_router.router)
 
 # Admin setup
 from app.admin import authentication_backend

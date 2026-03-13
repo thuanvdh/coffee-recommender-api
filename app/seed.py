@@ -10,7 +10,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
-from app.models import Base, CoffeeShop, ShopAmenity, ShopPurpose, ShopSpace, ShopStatus
+from app.models import Base, CoffeeShop, ShopAmenity, ShopPurpose, ShopSpace, ShopStatus, ShopDrink
 from app.crud import _slugify
 
 import json
@@ -53,6 +53,7 @@ async def seed_data():
 
     async with session_factory() as session:
         print("🧹 Đang dọn dẹp dữ liệu cũ...")
+        await session.execute(delete(ShopDrink))
         await session.execute(delete(ShopAmenity))
         await session.execute(delete(ShopPurpose))
         await session.execute(delete(ShopSpace))
@@ -82,7 +83,8 @@ async def seed_data():
                 latitude=shop_data.get("latitude"),
                 longitude=shop_data.get("longitude"),
                 price_range=random.choice(["20k - 50k", "30k - 60k", "40k - 80k"]),
-                opening_hours=random.choice(["07:00 - 22:00", "06:30 - 23:00", "24/7"])
+                opening_hours=random.choice(["07:00 - 22:00", "06:30 - 23:00", "24/7"]),
+                description=shop_data.get("description", "")
             )
             session.add(shop)
             await session.flush()
@@ -101,6 +103,18 @@ async def seed_data():
             amenities = shop_data.get("amenities", random.sample(ALL_AMENITIES, random.randint(2, 4)))
             for a in amenities:
                 session.add(ShopAmenity(shop_id=shop.id, amenity=a))
+
+            # Assign drinks
+            drinks = shop_data.get("drinks", [])
+            for d in drinks:
+                session.add(ShopDrink(
+                    shop_id=shop.id, 
+                    name=d["name"], 
+                    price=d.get("price"),
+                    category=d.get("category", "drink"),
+                    is_signature=d.get("is_signature", False),
+                    is_trending=d.get("is_trending", False)
+                ))
 
         await session.commit()
         print(f"✅ Đã seed {len(SHOPS_DATA)} quán cà phê thành công!")

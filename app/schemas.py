@@ -19,6 +19,14 @@ class AmenityBase(BaseModel):
     amenity: str
 
 
+class DrinkBase(BaseModel):
+    name: str
+    price: Optional[str] = None
+    category: str = "drink"
+    is_signature: bool = False
+    is_trending: bool = False
+
+
 # ========== Coffee Shop Schemas ==========
 class CoffeeShopBase(BaseModel):
     name: str
@@ -38,6 +46,7 @@ class CoffeeShopCreate(CoffeeShopBase):
     purposes: list[str] = []
     spaces: list[str] = []
     amenities: list[str] = []
+    drinks: list[DrinkBase] = []
 
 
 class CoffeeShopUpdate(BaseModel):
@@ -55,6 +64,14 @@ class CoffeeShopUpdate(BaseModel):
     purposes: Optional[list[str]] = None
     spaces: Optional[list[str]] = None
     amenities: Optional[list[str]] = None
+    drinks: Optional[list[DrinkBase]] = None
+
+
+class DrinkResponse(DrinkBase):
+    id: int
+
+    class Config:
+        from_attributes = True
 
 
 class CoffeeShopResponse(CoffeeShopBase):
@@ -63,6 +80,8 @@ class CoffeeShopResponse(CoffeeShopBase):
     purposes: list[str] = []
     spaces: list[str] = []
     amenities: list[str] = []
+    drinks: list[DrinkResponse] = []
+    distance_km: Optional[float] = None
     created_at: datetime
     updated_at: datetime
 
@@ -87,9 +106,19 @@ class FilterOptionsResponse(BaseModel):
 
 # ========== Shop Suggestions ==========
 class ShopSuggestionBase(BaseModel):
+    shop_id: Optional[int] = None # If updating existing
     shop_name: str
     address: Optional[str] = None
     district: Optional[str] = None
+    phone: Optional[str] = None
+    image_url: Optional[str] = None
+    description: Optional[str] = None
+    opening_hours: Optional[str] = None
+    price_range: Optional[str] = None
+    purposes: list[str] = []
+    spaces: list[str] = []
+    amenities: list[str] = []
+    drinks: list[DrinkBase] = []
     reason: Optional[str] = None
     contributor_name: Optional[str] = None
     contributor_email: Optional[str] = None
@@ -103,9 +132,14 @@ class ShopSuggestionResponse(ShopSuggestionBase):
     id: int
     status: str
     created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class ShopSuggestionApprove(BaseModel):
+    status: str # approved or rejected
 
 
 # ========== User Schemas ==========

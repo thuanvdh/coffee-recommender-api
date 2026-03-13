@@ -64,6 +64,9 @@ class CoffeeShop(Base):
     amenities = relationship(
         "ShopAmenity", back_populates="shop", cascade="all, delete-orphan"
     )
+    drinks = relationship(
+        "ShopDrink", back_populates="shop", cascade="all, delete-orphan"
+    )
 
 
 class ShopPurpose(Base):
@@ -101,18 +104,47 @@ class ShopAmenity(Base):
 
     shop = relationship("CoffeeShop", back_populates="amenities")
 
+
+class ShopDrink(Base):
+    __tablename__ = "shop_drinks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    shop_id = Column(
+        Integer, ForeignKey("coffee_shops.id", ondelete="CASCADE"), nullable=False
+    )
+    name = Column(String(255), nullable=False)
+    price = Column(String(50), nullable=True)
+    category = Column(String(50), default="drink")
+    is_signature = Column(Boolean, default=False)
+    is_trending = Column(Boolean, default=False)
+
+    shop = relationship("CoffeeShop", back_populates="drinks")
+
 class ShopSuggestion(Base):
     __tablename__ = "shop_suggestions"
 
     id = Column(Integer, primary_key=True, index=True)
+    shop_id = Column(Integer, ForeignKey("coffee_shops.id", ondelete="SET NULL"), nullable=True) # If updating existing
     shop_name = Column(String(255), nullable=False)
-    address = Column(String(255))
-    district = Column(String(100))
-    reason = Column(Text)
-    contributor_name = Column(String(255))
-    contributor_email = Column(String(255))
+    address = Column(Text, nullable=True)
+    district = Column(String(100), nullable=True)
+    phone = Column(String(20), nullable=True)
+    image_url = Column(String(500), nullable=True)
+    description = Column(Text, nullable=True)
+    opening_hours = Column(String(100), nullable=True)
+    price_range = Column(String(50), nullable=True)
+    
+    # New fields for complex data
+    json_data = Column(Text, nullable=True) # Stores purposes, spaces, amenities, drinks as JSON
+    
+    reason = Column(Text, nullable=True)
+    contributor_name = Column(String(255), nullable=True)
+    contributor_email = Column(String(255), nullable=True)
     status = Column(String(30), default="pending")  # pending, approved, rejected
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    target_shop = relationship("CoffeeShop", foreign_keys=[shop_id])
 
 
 class User(Base):
