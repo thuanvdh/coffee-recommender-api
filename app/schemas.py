@@ -27,6 +27,37 @@ class DrinkBase(BaseModel):
     is_trending: bool = False
 
 
+# ========== Image & Review Schemas ==========
+class ShopImageBase(BaseModel):
+    url: str
+    alt_text: Optional[str] = None
+
+
+class ShopImageResponse(ShopImageBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+
+class ReviewBase(BaseModel):
+    user_name: str
+    rating: int = 5
+    comment: Optional[str] = None
+
+
+class ReviewCreate(ReviewBase):
+    pass
+
+
+class ReviewResponse(ReviewBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ========== Coffee Shop Schemas ==========
 class CoffeeShopBase(BaseModel):
     name: str
@@ -81,6 +112,8 @@ class CoffeeShopResponse(CoffeeShopBase):
     spaces: list[str] = []
     amenities: list[str] = []
     drinks: list[DrinkResponse] = []
+    images: list[ShopImageResponse] = []
+    reviews: list[ReviewResponse] = []
     distance_km: Optional[float] = None
     created_at: datetime
     updated_at: datetime
