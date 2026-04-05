@@ -12,6 +12,8 @@ from app.schemas import (
     CoffeeShopResponse,
     CoffeeShopUpdate,
     FilterOptionsResponse,
+    ReviewCreate,
+    ReviewResponse,
 )
 
 router = APIRouter(prefix="/api", tags=["Coffee Shops"])
@@ -45,6 +47,18 @@ def _shop_to_response(shop) -> CoffeeShopResponse:
             "is_signature": d.is_signature,
             "is_trending": d.is_trending
         } for d in shop.drinks],
+        images=[{
+            "id": img.id,
+            "url": img.url,
+            "alt_text": img.alt_text
+        } for img in shop.images],
+        reviews=[{
+            "id": r.id,
+            "user_name": r.user_name,
+            "rating": r.rating,
+            "comment": r.comment,
+            "created_at": r.created_at
+        } for r in shop.reviews],
         created_at=shop.created_at,
         updated_at=shop.updated_at,
     )
@@ -168,3 +182,11 @@ async def get_filter_options(db: AsyncSession = Depends(get_db)):
         spaces=await crud.get_distinct_spaces(db),
         amenities=await crud.get_distinct_amenities(db),
     )
+
+
+@router.post("/shops/{shop_id}/reviews", response_model=ReviewResponse, status_code=201)
+async def create_review(
+    shop_id: int, review_data: ReviewCreate, db: AsyncSession = Depends(get_db)
+):
+    """Gửi nhận xét cho quán cà phê."""
+    return await crud.create_review(db, shop_id, review_data)

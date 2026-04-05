@@ -69,6 +69,8 @@ async def get_shops(
             selectinload(CoffeeShop.spaces),
             selectinload(CoffeeShop.amenities),
             selectinload(CoffeeShop.drinks),
+            selectinload(CoffeeShop.images),
+            selectinload(CoffeeShop.reviews),
         )
     else:
         query = select(CoffeeShop).options(
@@ -76,6 +78,8 @@ async def get_shops(
             selectinload(CoffeeShop.spaces),
             selectinload(CoffeeShop.amenities),
             selectinload(CoffeeShop.drinks),
+            selectinload(CoffeeShop.images),
+            selectinload(CoffeeShop.reviews),
         )
         
     count_query = select(func.count(func.distinct(CoffeeShop.id)))
@@ -192,6 +196,8 @@ async def get_shop_by_id(db: AsyncSession, shop_id: int) -> Optional[CoffeeShop]
             selectinload(CoffeeShop.spaces),
             selectinload(CoffeeShop.amenities),
             selectinload(CoffeeShop.drinks),
+            selectinload(CoffeeShop.images),
+            selectinload(CoffeeShop.reviews),
         )
         .where(CoffeeShop.id == shop_id)
     )
@@ -208,6 +214,8 @@ async def get_shop_by_slug(db: AsyncSession, slug: str) -> Optional[CoffeeShop]:
             selectinload(CoffeeShop.spaces),
             selectinload(CoffeeShop.amenities),
             selectinload(CoffeeShop.drinks),
+            selectinload(CoffeeShop.images),
+            selectinload(CoffeeShop.reviews),
         )
         .where(CoffeeShop.slug == slug)
     )
@@ -498,3 +506,16 @@ async def reject_suggestion(db: AsyncSession, suggestion_id: int) -> bool:
     suggestion.status = "rejected"
     await db.commit()
     return True
+
+async def create_review(db: AsyncSession, shop_id: int, review_data: "ReviewCreate") -> "Review":
+    from app.models import Review
+    review = Review(
+        shop_id=shop_id,
+        user_name=review_data.user_name,
+        rating=review_data.rating,
+        comment=review_data.comment
+    )
+    db.add(review)
+    await db.commit()
+    await db.refresh(review)
+    return review

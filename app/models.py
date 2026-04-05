@@ -67,6 +67,12 @@ class CoffeeShop(Base):
     drinks = relationship(
         "ShopDrink", back_populates="shop", cascade="all, delete-orphan"
     )
+    images = relationship(
+        "ShopImage", back_populates="shop", cascade="all, delete-orphan"
+    )
+    reviews = relationship(
+        "Review", back_populates="shop", cascade="all, delete-orphan"
+    )
 
 
 class ShopPurpose(Base):
@@ -119,6 +125,37 @@ class ShopDrink(Base):
     is_trending = Column(Boolean, default=False)
 
     shop = relationship("CoffeeShop", back_populates="drinks")
+
+
+class ShopImage(Base):
+    __tablename__ = "shop_images"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    shop_id = Column(
+        Integer, ForeignKey("coffee_shops.id", ondelete="CASCADE"), nullable=False
+    )
+    url = Column(String(500), nullable=False)
+    alt_text = Column(String(255), nullable=True)
+
+    shop = relationship("CoffeeShop", back_populates="images")
+
+
+class Review(Base):
+    __tablename__ = "reviews"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    shop_id = Column(
+        Integer, ForeignKey("coffee_shops.id", ondelete="CASCADE"), nullable=False
+    )
+    user_name = Column(String(100), nullable=False)
+    rating = Column(Integer, nullable=False, default=5)
+    comment = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime, default=lambda: datetime.utcnow(), nullable=False
+    )
+
+    shop = relationship("CoffeeShop", back_populates="reviews")
+
 
 class ShopSuggestion(Base):
     __tablename__ = "shop_suggestions"
