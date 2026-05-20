@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models import (
     CoffeeShop,
+    Review,
     ShopAmenity,
     ShopPurpose,
     ShopSpace,
@@ -198,6 +199,20 @@ class ShopRepository(BaseRepository[CoffeeShop, CoffeeShopCreate, CoffeeShopUpda
             .order_by(CoffeeShop.name)
         )
         return list(result.scalars().all())
+
+    async def get_top_rated(self, db: AsyncSession, limit: int = 10) -> list[CoffeeShop]:
+        """Get top-rated shops ordered by average rating and review count."""
+        review_count = func.count(Review.id)
+        average_rating = func.avg(Review.rating)
+        result = await db.execute(
+            select(CoffeeShop)
+            .join(CoffeeShop.reviews)
+            .options(*_shop_eager_options())
+            .group_by(CoffeeShop.id)
+            .order_by(average_rating.desc(), review_count.desc(), CoffeeShop.name)
+            .limit(limit)
+        )
+        return list(result.unique().scalars().all())
 
     async def get_distinct_districts(self, db: AsyncSession) -> list[str]:
         """Get all unique districts."""

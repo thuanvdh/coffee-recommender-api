@@ -111,6 +111,34 @@ async def test_get_map_shops_returns_lightweight_locations(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_get_top_rated_shops_uses_review_ranking(client: AsyncClient):
+    """Test top-rated endpoint ranks shops on the backend."""
+    first = await client.post("/api/shops", json={"name": "Good Coffee"})
+    second = await client.post("/api/shops", json={"name": "Great Coffee"})
+    unrated = await client.post("/api/shops", json={"name": "No Review Coffee"})
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert unrated.status_code == 201
+
+    first_id = first.json()["id"]
+    second_id = second.json()["id"]
+    await client.post(
+        f"/api/shops/{first_id}/reviews",
+        json={"user_name": "A", "rating": 4, "comment": "Good"},
+    )
+    await client.post(
+        f"/api/shops/{second_id}/reviews",
+        json={"user_name": "B", "rating": 5, "comment": "Great"},
+    )
+
+    response = await client.get("/api/shops/top-rated?limit=10")
+    assert response.status_code == 200
+    data = response.json()
+    assert [shop["name"] for shop in data] == ["Great Coffee", "Good Coffee"]
+    assert all(shop["reviews"] for shop in data)
+
+
+@pytest.mark.asyncio
 async def test_health_check(client: AsyncClient):
     """Test health endpoint."""
     response = await client.get("/health")

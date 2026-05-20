@@ -63,6 +63,16 @@ async def list_map_shops(db: AsyncSession = Depends(get_db)):
     return await shop_service.get_map_shops(db)
 
 
+@router.get("/shops/top-rated", response_model=list[CoffeeShopResponse])
+async def list_top_rated_shops(
+    limit: int = Query(10, ge=1, le=50, description="Số lượng quán top"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lấy danh sách quán được đánh giá cao nhất."""
+    shops = await shop_service.get_top_rated_shops(db, limit=limit)
+    return [shop_to_response(shop) for shop in shops]
+
+
 @router.get("/shops/{shop_id}", response_model=CoffeeShopResponse)
 async def get_shop(shop_id: int, db: AsyncSession = Depends(get_db)):
     """Lấy chi tiết một quán cà phê."""

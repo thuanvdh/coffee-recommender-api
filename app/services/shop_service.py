@@ -55,6 +55,12 @@ class ShopService:
         """Get lightweight shop records for map display."""
         return await self.repository.get_map_shops(db)
 
+    async def get_top_rated_shops(
+        self, db: AsyncSession, limit: int = 10
+    ) -> list[CoffeeShop]:
+        """Get the highest-rated shops for the Top 10 page."""
+        return await self.repository.get_top_rated(db, limit=limit)
+
     async def create_shop(self, db: AsyncSession, shop_data: CoffeeShopCreate) -> CoffeeShop:
         """Create a new coffee shop with unique slug and relationships."""
         slug = slugify_vietnamese(shop_data.name)
