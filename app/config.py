@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:5173"
     APP_TITLE: str = "Danang Coffee API"
     APP_VERSION: str = "1.0.0"
+    CLOUDINARY_CLOUD_NAME: str | None = None
+    CLOUDINARY_API_KEY: str | None = None
+    CLOUDINARY_API_SECRET: str | None = None
 
     # Admin Security
     SECRET_KEY: str | None = None

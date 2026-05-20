@@ -3,6 +3,8 @@
 import pytest
 from httpx import AsyncClient
 
+from app.routers import suggestions as suggestions_router
+
 
 @pytest.mark.asyncio
 async def test_create_suggestion(client: AsyncClient):
@@ -24,6 +26,34 @@ async def test_create_suggestion(client: AsyncClient):
     data = response.json()
     assert data["shop_name"] == "Suggested Coffee"
     assert data["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_create_suggestion_with_image_uploads_and_saves_url(
+    client: AsyncClient, monkeypatch
+):
+    """Test creating a suggestion with an uploaded image stores the Cloudinary URL."""
+
+    async def fake_upload(file, shop_name):
+        assert shop_name == "Image Coffee"
+        assert file.filename == "shop.webp"
+        return "https://res.cloudinary.com/demo/image/upload/suggestions/shop.webp"
+
+    monkeypatch.setattr(suggestions_router, "upload_suggestion_image", fake_upload)
+    response = await client.post(
+        "/api/suggestions/with-image",
+        data={
+            "shop_name": "Image Coffee",
+            "address": "123 Image Street",
+            "district": "Hải Châu",
+            "reason": "Quán có ảnh đẹp",
+        },
+        files={"image": ("shop.webp", b"fake-image", "image/webp")},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["shop_name"] == "Image Coffee"
+    assert data["image_url"] == "https://res.cloudinary.com/demo/image/upload/suggestions/shop.webp"
 
 
 @pytest.mark.asyncio
