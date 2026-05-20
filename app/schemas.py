@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.models import ShopStatus
 
@@ -34,10 +34,9 @@ class ShopImageBase(BaseModel):
 
 
 class ShopImageResponse(ShopImageBase):
-    id: int
+    model_config = ConfigDict(from_attributes=True)
 
-    class Config:
-        from_attributes = True
+    id: int
 
 
 class ReviewBase(BaseModel):
@@ -51,11 +50,10 @@ class ReviewCreate(ReviewBase):
 
 
 class ReviewResponse(ReviewBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # ========== Coffee Shop Schemas ==========
@@ -99,13 +97,14 @@ class CoffeeShopUpdate(BaseModel):
 
 
 class DrinkResponse(DrinkBase):
-    id: int
+    model_config = ConfigDict(from_attributes=True)
 
-    class Config:
-        from_attributes = True
+    id: int
 
 
 class CoffeeShopResponse(CoffeeShopBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     slug: str
     purposes: list[str] = []
@@ -118,15 +117,25 @@ class CoffeeShopResponse(CoffeeShopBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class CoffeeShopListResponse(BaseModel):
     total: int
     page: int
     limit: int
     shops: list[CoffeeShopResponse]
+
+
+class ShopMapResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    slug: str
+    image_url: Optional[str] = None
+    address: Optional[str] = None
+    district: Optional[str] = None
+    latitude: float
+    longitude: float
 
 
 # ========== Filter Options ==========
@@ -162,13 +171,12 @@ class ShopSuggestionCreate(ShopSuggestionBase):
 
 
 class ShopSuggestionResponse(ShopSuggestionBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     status: str
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class ShopSuggestionApprove(BaseModel):
@@ -189,8 +197,7 @@ class UserCreate(UserBase):
 
 
 class UserResponse(UserBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     created_at: datetime
-
-    class Config:
-        from_attributes = True

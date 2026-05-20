@@ -10,8 +10,8 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
-from app.models import Base, CoffeeShop, ShopAmenity, ShopPurpose, ShopSpace, ShopStatus, ShopDrink
-from app.crud import _slugify
+from app.models import Base, CoffeeShop, ShopAmenity, ShopPurpose, ShopSpace, ShopStatus, ShopDrink, ShopImage
+from app.utils import slugify_vietnamese
 
 import json
 import os
@@ -54,6 +54,7 @@ async def seed_data():
     async with session_factory() as session:
         print("🧹 Đang dọn dẹp dữ liệu cũ...")
         await session.execute(delete(ShopDrink))
+        await session.execute(delete(ShopImage))
         await session.execute(delete(ShopAmenity))
         await session.execute(delete(ShopPurpose))
         await session.execute(delete(ShopSpace))
@@ -65,7 +66,7 @@ async def seed_data():
         seen_slugs = set()
 
         for shop_data in SHOPS_DATA:
-            base_slug = _slugify(shop_data["name"])
+            base_slug = slugify_vietnamese(shop_data["name"])
             slug = base_slug
             counter = 1
             while slug in seen_slugs:
@@ -114,6 +115,15 @@ async def seed_data():
                     category=d.get("category", "drink"),
                     is_signature=d.get("is_signature", False),
                     is_trending=d.get("is_trending", False)
+                ))
+
+            # Assign gallery images
+            gallery_images = shop_data.get("gallery_images", [])
+            for img in gallery_images:
+                session.add(ShopImage(
+                    shop_id=shop.id,
+                    url=img["url"],
+                    alt_text=img.get("alt_text", f"{shop.name} gallery image")
                 ))
 
         await session.commit()

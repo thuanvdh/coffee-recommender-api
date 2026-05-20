@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import json
 import subprocess
 from pathlib import Path
 
@@ -77,11 +78,10 @@ SLUG_MAP = {
     "the-hideout-cafe": "the-hideout-cafe-do-ba"
 }
 
-async def process_shop(session: AsyncSession, shop_dir: Path):
+async def process_shop(session: AsyncSession, shop_dir: Path, crawled_data: list):
     folder_name = shop_dir.name
     slug = SLUG_MAP.get(folder_name, folder_name)
 
-    
     # Query shop by slug
     stmt = select(CoffeeShop).where(CoffeeShop.slug == slug)
     result = await session.execute(stmt)
@@ -93,6 +93,13 @@ async def process_shop(session: AsyncSession, shop_dir: Path):
         
     print(f"☕ Processing shop: {shop.name} ({slug})")
     
+    # Find matching shop in crawled_shops.json
+    matched_json_shop = None
+    for js in crawled_data:
+        if js.get("slug") == slug:
+            matched_json_shop = js
+            break
+
     # 1. Upload Cover Image
     cover_path = shop_dir / "images" / "cover" / "cover.webp"
     if cover_path.exists():
@@ -103,17 +110,22 @@ async def process_shop(session: AsyncSession, shop_dir: Path):
             if secure_url:
                 shop.image_url = secure_url
                 print(f"   Cover URL updated: {secure_url}")
+                if matched_json_shop:
+                    matched_json_shop["image_url"] = secure_url
         else:
             print("   Cover image already on Cloudinary. Skipping...")
+            if matched_json_shop and "cloudinary.com" in shop.image_url:
+                matched_json_shop["image_url"] = shop.image_url
             
     # 2. Upload Gallery Images (space, drinks, menu)
     categories = ["space", "drinks", "menu"]
     
-    # Clear existing gallery images first if desired, or skip duplicates.
-    # To keep it safe, let's query existing image URLs for this shop.
+    # Query existing image URLs for this shop
     img_stmt = select(ShopImage).where(ShopImage.shop_id == shop.id)
     img_result = await session.execute(img_stmt)
     existing_urls = {img.url for img in img_result.scalars().all()}
+    
+    gallery_images_list = []
     
     for category in categories:
         category_dir = shop_dir / "images" / category
@@ -123,11 +135,12 @@ async def process_shop(session: AsyncSession, shop_dir: Path):
                 public_id = f"{slug}_{category}_{i+1}"
                 
                 # Check if this public ID URL already exists in DB
-                # Simple heuristical check
                 already_uploaded = False
+                secure_url = None
                 for url in existing_urls:
                     if public_id in url:
                         already_uploaded = True
+                        secure_url = url
                         break
                         
                 if not already_uploaded:
@@ -144,6 +157,15 @@ async def process_shop(session: AsyncSession, shop_dir: Path):
                         print(f"   Added to DB gallery: {secure_url}")
                 else:
                     print(f"   Gallery image {img_path.name} already uploaded. Skipping...")
+                
+                if secure_url:
+                    gallery_images_list.append({
+                        "url": secure_url,
+                        "alt_text": f"{shop.name} - {category} {i+1}"
+                    })
+
+    if matched_json_shop and gallery_images_list:
+        matched_json_shop["gallery_images"] = gallery_images_list
 
     # Commit progress for this shop
     await session.commit()
@@ -153,20 +175,41 @@ async def main():
         print(f"❌ Error: {OUTPUT_DIR} directory not found.")
         return
         
+    crawled_shops_path = Path("crawled_shops.json")
+    crawled_data = []
+    if crawled_shops_path.exists():
+        try:
+            with open(crawled_shops_path, "r", encoding="utf-8") as f:
+                crawled_data = json.load(f)
+            print(f"Loaded {len(crawled_data)} entries from crawled_shops.json")
+        except Exception as e:
+            print(f"⚠️ Error loading crawled_shops.json: {e}")
+
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     
-    async with session_factory() as session:
-        shop_dirs = [d for d in OUTPUT_DIR.iterdir() if d.is_dir()]
-        print(f"Found {len(shop_dirs)} shop directories to process.")
-        
-        for i, shop_dir in enumerate(shop_dirs):
-            print(f"\n[{i+1}/{len(shop_dirs)}] ----------------------------------------")
-            try:
-                await process_shop(session, shop_dir)
-            except Exception as e:
-                print(f"❌ Error processing shop {shop_dir.name}: {e}")
-                await session.rollback()
+    shop_dirs = [d for d in OUTPUT_DIR.iterdir() if d.is_dir()]
+    print(f"Found {len(shop_dirs)} shop directories to process.")
+    
+    sem = asyncio.Semaphore(15)
+    file_lock = asyncio.Lock()
+    
+    async def worker(shop_dir: Path, idx: int, total: int):
+        async with sem:
+            async with session_factory() as session:
+                try:
+                    await process_shop(session, shop_dir, crawled_data)
+                    async with file_lock:
+                        if crawled_shops_path.exists() or len(crawled_data) > 0:
+                            with open(crawled_shops_path, "w", encoding="utf-8") as f:
+                                json.dump(crawled_data, f, ensure_ascii=False, indent=2)
+                    print(f"✅ [{idx+1}/{total}] Finished processing {shop_dir.name}")
+                except Exception as e:
+                    print(f"❌ [{idx+1}/{total}] Error processing shop {shop_dir.name}: {e}")
+                    await session.rollback()
+
+    tasks = [worker(shop_dir, i, len(shop_dirs)) for i, shop_dir in enumerate(shop_dirs)]
+    await asyncio.gather(*tasks)
                 
     await engine.dispose()
     print("\n🏁 Done! All images processed and uploaded to Cloudinary.")

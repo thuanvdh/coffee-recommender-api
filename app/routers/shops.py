@@ -3,9 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import crud
 from app.database import get_db
-from app.models import ShopStatus
 from app.schemas import (
     CoffeeShopCreate,
     CoffeeShopListResponse,
@@ -14,54 +12,13 @@ from app.schemas import (
     FilterOptionsResponse,
     ReviewCreate,
     ReviewResponse,
+    ShopMapResponse,
 )
+from app.serializers import shop_to_response
+from app.services.shop_service import shop_service
+from app.services.review_service import review_service
 
 router = APIRouter(prefix="/api", tags=["Coffee Shops"])
-
-
-def _shop_to_response(shop) -> CoffeeShopResponse:
-    """Convert ORM shop to response schema."""
-    return CoffeeShopResponse(
-        id=shop.id,
-        name=shop.name,
-        slug=shop.slug,
-        address=shop.address,
-        district=shop.district,
-        phone=shop.phone,
-        image_url=shop.image_url,
-        description=shop.description,
-        opening_hours=shop.opening_hours,
-        price_range=shop.price_range,
-        status=shop.status,
-        latitude=shop.latitude,
-        longitude=shop.longitude,
-        distance_km=getattr(shop, 'distance_km', None),
-        purposes=[p.purpose for p in shop.purposes],
-        spaces=[s.space_type for s in shop.spaces],
-        amenities=[a.amenity for a in shop.amenities],
-        drinks=[{
-            "id": d.id, 
-            "name": d.name, 
-            "price": d.price,
-            "category": d.category,
-            "is_signature": d.is_signature,
-            "is_trending": d.is_trending
-        } for d in shop.drinks],
-        images=[{
-            "id": img.id,
-            "url": img.url,
-            "alt_text": img.alt_text
-        } for img in shop.images],
-        reviews=[{
-            "id": r.id,
-            "user_name": r.user_name,
-            "rating": r.rating,
-            "comment": r.comment,
-            "created_at": r.created_at
-        } for r in shop.reviews],
-        created_at=shop.created_at,
-        updated_at=shop.updated_at,
-    )
 
 
 @router.get("/shops", response_model=CoffeeShopListResponse)
@@ -79,7 +36,7 @@ async def list_shops(
     db: AsyncSession = Depends(get_db),
 ):
     """Lấy danh sách quán cà phê với bộ lọc và phân trang."""
-    shops, total = await crud.get_shops(
+    shops, total = await shop_service.list_shops(
         db,
         search=search,
         district=district,
@@ -96,26 +53,32 @@ async def list_shops(
         total=total,
         page=page,
         limit=limit,
-        shops=[_shop_to_response(s) for s in shops],
+        shops=[shop_to_response(s) for s in shops],
     )
+
+
+@router.get("/shops/map", response_model=list[ShopMapResponse])
+async def list_map_shops(db: AsyncSession = Depends(get_db)):
+    """Lấy danh sách quán tối giản để hiển thị bản đồ."""
+    return await shop_service.get_map_shops(db)
 
 
 @router.get("/shops/{shop_id}", response_model=CoffeeShopResponse)
 async def get_shop(shop_id: int, db: AsyncSession = Depends(get_db)):
     """Lấy chi tiết một quán cà phê."""
-    shop = await crud.get_shop_by_id(db, shop_id)
+    shop = await shop_service.get_shop_by_id(db, shop_id)
     if not shop:
         raise HTTPException(status_code=404, detail="Không tìm thấy quán cà phê")
-    return _shop_to_response(shop)
+    return shop_to_response(shop)
 
 
 @router.get("/shops/slug/{slug}", response_model=CoffeeShopResponse)
 async def get_shop_by_slug(slug: str, db: AsyncSession = Depends(get_db)):
     """Lấy chi tiết một quán cà phê theo slug."""
-    shop = await crud.get_shop_by_slug(db, slug)
+    shop = await shop_service.get_shop_by_slug(db, slug)
     if not shop:
         raise HTTPException(status_code=404, detail="Không tìm thấy quán cà phê")
-    return _shop_to_response(shop)
+    return shop_to_response(shop)
 
 
 @router.post("/shops", response_model=CoffeeShopResponse, status_code=201)
@@ -123,8 +86,8 @@ async def create_shop(
     shop_data: CoffeeShopCreate, db: AsyncSession = Depends(get_db)
 ):
     """Tạo quán cà phê mới."""
-    shop = await crud.create_shop(db, shop_data)
-    return _shop_to_response(shop)
+    shop = await shop_service.create_shop(db, shop_data)
+    return shop_to_response(shop)
 
 
 @router.put("/shops/{shop_id}", response_model=CoffeeShopResponse)
@@ -134,16 +97,16 @@ async def update_shop(
     db: AsyncSession = Depends(get_db),
 ):
     """Cập nhật thông tin quán cà phê."""
-    shop = await crud.update_shop(db, shop_id, shop_data)
+    shop = await shop_service.update_shop(db, shop_id, shop_data)
     if not shop:
         raise HTTPException(status_code=404, detail="Không tìm thấy quán cà phê")
-    return _shop_to_response(shop)
+    return shop_to_response(shop)
 
 
 @router.delete("/shops/{shop_id}", status_code=204)
 async def delete_shop(shop_id: int, db: AsyncSession = Depends(get_db)):
     """Xóa quán cà phê."""
-    deleted = await crud.delete_shop(db, shop_id)
+    deleted = await shop_service.delete_shop(db, shop_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Không tìm thấy quán cà phê")
     return None
@@ -152,41 +115,38 @@ async def delete_shop(shop_id: int, db: AsyncSession = Depends(get_db)):
 @router.get("/districts", response_model=list[str])
 async def list_districts(db: AsyncSession = Depends(get_db)):
     """Lấy danh sách quận."""
-    return await crud.get_distinct_districts(db)
+    return await shop_service.repository.get_distinct_districts(db)
 
 
 @router.get("/purposes", response_model=list[str])
 async def list_purposes(db: AsyncSession = Depends(get_db)):
     """Lấy danh sách loại hình."""
-    return await crud.get_distinct_purposes(db)
+    return await shop_service.repository.get_distinct_purposes(db)
 
 
 @router.get("/spaces", response_model=list[str])
 async def list_spaces(db: AsyncSession = Depends(get_db)):
     """Lấy danh sách không gian."""
-    return await crud.get_distinct_spaces(db)
+    return await shop_service.repository.get_distinct_spaces(db)
 
 
 @router.get("/amenities", response_model=list[str])
 async def list_amenities(db: AsyncSession = Depends(get_db)):
     """Lấy danh sách tiện ích."""
-    return await crud.get_distinct_amenities(db)
+    return await shop_service.repository.get_distinct_amenities(db)
 
 
 @router.get("/filters", response_model=FilterOptionsResponse)
 async def get_filter_options(db: AsyncSession = Depends(get_db)):
     """Lấy tất cả các tùy chọn bộ lọc."""
-    return FilterOptionsResponse(
-        districts=await crud.get_distinct_districts(db),
-        purposes=await crud.get_distinct_purposes(db),
-        spaces=await crud.get_distinct_spaces(db),
-        amenities=await crud.get_distinct_amenities(db),
-    )
+    return await shop_service.get_filter_options(db)
 
 
-@router.post("/shops/{shop_id}/reviews", response_model=ReviewResponse, status_code=201)
+@router.post(
+    "/shops/{shop_id}/reviews", response_model=ReviewResponse, status_code=201
+)
 async def create_review(
     shop_id: int, review_data: ReviewCreate, db: AsyncSession = Depends(get_db)
 ):
     """Gửi nhận xét cho quán cà phê."""
-    return await crud.create_review(db, shop_id, review_data)
+    return await review_service.create_review(db, shop_id, review_data)

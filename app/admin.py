@@ -49,11 +49,11 @@ class SuggestionAdmin(ModelView, model=ShopSuggestion):
         pks = request.query_params.get("pks", "").split(",")
         if pks:
             from app.database import async_session
-            from app import crud
+            from app.services.suggestion_service import suggestion_service
             async with async_session() as session:
                 for pk in pks:
                     if pk.isdigit():
-                        await crud.approve_suggestion(session, int(pk))
+                        await suggestion_service.approve_suggestion(session, int(pk))
         return RedirectResponse(request.url_for("admin:list", identity=self.identity))
 
     @action(name="reject_suggestion", label="Từ chối", confirmation_message="Từ chối các đề xuất này?")
@@ -61,11 +61,11 @@ class SuggestionAdmin(ModelView, model=ShopSuggestion):
         pks = request.query_params.get("pks", "").split(",")
         if pks:
             from app.database import async_session
-            from app import crud
+            from app.services.suggestion_service import suggestion_service
             async with async_session() as session:
                 for pk in pks:
                     if pk.isdigit():
-                        await crud.reject_suggestion(session, int(pk))
+                        await suggestion_service.reject_suggestion(session, int(pk))
         return RedirectResponse(request.url_for("admin:list", identity=self.identity))
 
 

@@ -45,12 +45,12 @@ class CoffeeShop(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     created_at = Column(
-        DateTime, default=lambda: datetime.utcnow(), nullable=False
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False
     )
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.utcnow(),
-        onupdate=lambda: datetime.utcnow(),
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
         nullable=False,
     )
 
@@ -151,7 +151,7 @@ class Review(Base):
     rating = Column(Integer, nullable=False, default=5)
     comment = Column(Text, nullable=True)
     created_at = Column(
-        DateTime, default=lambda: datetime.utcnow(), nullable=False
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False
     )
 
     shop = relationship("CoffeeShop", back_populates="reviews")
@@ -178,8 +178,8 @@ class ShopSuggestion(Base):
     contributor_name = Column(String(255), nullable=True)
     contributor_email = Column(String(255), nullable=True)
     status = Column(String(30), default="pending")  # pending, approved, rejected
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     target_shop = relationship("CoffeeShop", foreign_keys=[shop_id])
 
@@ -194,4 +194,4 @@ class User(Base):
     full_name = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))

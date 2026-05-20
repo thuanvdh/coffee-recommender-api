@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import crud
 from app.database import get_db
 from app.schemas import ShopSuggestionCreate, ShopSuggestionResponse
+from app.services.suggestion_service import suggestion_service
 
 router = APIRouter(prefix="/api/suggestions", tags=["Suggestions"])
 
@@ -13,4 +13,4 @@ async def create_suggestion(
     suggestion_data: ShopSuggestionCreate, db: AsyncSession = Depends(get_db)
 ):
     """Gửi một đề xuất quán cà phê mới."""
-    return await crud.create_suggestion(db, suggestion_data)
+    return await suggestion_service.create_suggestion(db, suggestion_data)
