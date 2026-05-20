@@ -112,7 +112,7 @@ async def test_get_map_shops_returns_lightweight_locations(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_get_top_rated_shops_uses_review_ranking(client: AsyncClient):
-    """Test top-rated endpoint ranks shops on the backend."""
+    """Test top-rated endpoint ranks reviewed shops and fills missing slots."""
     first = await client.post("/api/shops", json={"name": "Good Coffee"})
     second = await client.post("/api/shops", json={"name": "Great Coffee"})
     unrated = await client.post("/api/shops", json={"name": "No Review Coffee"})
@@ -134,8 +134,10 @@ async def test_get_top_rated_shops_uses_review_ranking(client: AsyncClient):
     response = await client.get("/api/shops/top-rated?limit=10")
     assert response.status_code == 200
     data = response.json()
-    assert [shop["name"] for shop in data] == ["Great Coffee", "Good Coffee"]
-    assert all(shop["reviews"] for shop in data)
+    assert len(data) == 3
+    assert [shop["name"] for shop in data[:2]] == ["Great Coffee", "Good Coffee"]
+    assert data[2]["name"] == "No Review Coffee"
+    assert data[2]["reviews"] == []
 
 
 @pytest.mark.asyncio

@@ -201,15 +201,21 @@ class ShopRepository(BaseRepository[CoffeeShop, CoffeeShopCreate, CoffeeShopUpda
         return list(result.scalars().all())
 
     async def get_top_rated(self, db: AsyncSession, limit: int = 10) -> list[CoffeeShop]:
-        """Get top-rated shops ordered by average rating and review count."""
+        """Get top shops, preferring reviewed shops and filling the rest."""
         review_count = func.count(Review.id)
         average_rating = func.avg(Review.rating)
         result = await db.execute(
             select(CoffeeShop)
-            .join(CoffeeShop.reviews)
+            .outerjoin(CoffeeShop.reviews)
             .options(*_shop_eager_options())
             .group_by(CoffeeShop.id)
-            .order_by(average_rating.desc(), review_count.desc(), CoffeeShop.name)
+            .order_by(
+                (review_count > 0).desc(),
+                average_rating.desc().nulls_last(),
+                review_count.desc(),
+                CoffeeShop.created_at.desc(),
+                CoffeeShop.name,
+            )
             .limit(limit)
         )
         return list(result.unique().scalars().all())
