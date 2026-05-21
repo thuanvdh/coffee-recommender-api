@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.dependencies import get_current_admin
+from app.models import User
 from app.schemas import (
     CoffeeShopCreate,
     CoffeeShopListResponse,
@@ -114,7 +116,11 @@ async def update_shop(
 
 
 @router.delete("/shops/{shop_id}", status_code=204)
-async def delete_shop(shop_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_shop(
+    shop_id: int, 
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin)
+):
     """Xóa quán cà phê."""
     deleted = await shop_service.delete_shop(db, shop_id)
     if not deleted:

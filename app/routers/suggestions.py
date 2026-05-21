@@ -29,10 +29,27 @@ async def create_suggestion_with_image(
     reason: str | None = Form(None),
     contributor_name: str | None = Form(None),
     contributor_email: str | None = Form(None),
+    json_data: str | None = Form(None),
     image: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
     """Gửi đề xuất quán mới kèm ảnh, lưu ảnh lên Cloudinary trước."""
+    import json
+    from app.schemas import DrinkBase
+
+    purposes, spaces, amenities, drinks = [], [], [], []
+    if json_data:
+        try:
+            data = json.loads(json_data)
+            purposes = data.get("purposes", [])
+            spaces = data.get("spaces", [])
+            amenities = data.get("amenities", [])
+            
+            drinks_data = data.get("drinks", [])
+            drinks = [DrinkBase(name=d.get("name"), price=d.get("price")) for d in drinks_data if d.get("name")]
+        except Exception:
+            pass # ignore parse errors
+
     image_url = await upload_suggestion_image(image, shop_name)
     suggestion_data = ShopSuggestionCreate(
         shop_name=shop_name,
@@ -46,5 +63,9 @@ async def create_suggestion_with_image(
         reason=reason,
         contributor_name=contributor_name,
         contributor_email=contributor_email,
+        purposes=purposes,
+        spaces=spaces,
+        amenities=amenities,
+        drinks=drinks,
     )
     return await suggestion_service.create_suggestion(db, suggestion_data)

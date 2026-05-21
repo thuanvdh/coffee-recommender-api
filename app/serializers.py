@@ -1,4 +1,36 @@
-from app.schemas import CoffeeShopResponse
+import json
+from app.schemas import CoffeeShopResponse, ShopSuggestionResponse
+
+
+def suggestion_to_response(suggestion) -> ShopSuggestionResponse:
+    data = {}
+    if suggestion.json_data:
+        try:
+            data = json.loads(suggestion.json_data)
+        except Exception:
+            pass
+    return ShopSuggestionResponse(
+        id=suggestion.id,
+        shop_id=suggestion.shop_id,
+        shop_name=suggestion.shop_name,
+        address=suggestion.address,
+        district=suggestion.district,
+        phone=suggestion.phone,
+        image_url=suggestion.image_url,
+        description=suggestion.description,
+        opening_hours=suggestion.opening_hours,
+        price_range=suggestion.price_range,
+        reason=suggestion.reason,
+        contributor_name=suggestion.contributor_name,
+        contributor_email=suggestion.contributor_email,
+        purposes=data.get("purposes", []),
+        spaces=data.get("spaces", []),
+        amenities=data.get("amenities", []),
+        drinks=data.get("drinks", []),
+        status=suggestion.status,
+        created_at=suggestion.created_at,
+        updated_at=suggestion.updated_at,
+    )
 
 
 def shop_to_response(shop) -> CoffeeShopResponse:
