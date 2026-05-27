@@ -42,12 +42,25 @@ class Settings(BaseSettings):
             parsed = urlparse(db_url)
             if parsed.query:
                 params = dict(parse_qsl(parsed.query))
-                if "sslmode" in params:
+                # Map sslmode to ssl for asyncpg
+                if "sslmode" in params and "ssl" not in params:
                     params["ssl"] = params.pop("sslmode")
-                    new_query = urlencode(params)
-                    self.DATABASE_URL = urlunparse(parsed._replace(query=new_query))
-                else:
-                    self.DATABASE_URL = db_url
+                elif "sslmode" in params:
+                    params.pop("sslmode")
+
+                # Whitelist of query parameters that asyncpg accepts
+                asyncpg_safe_params = {
+                    "ssl",
+                    "timeout",
+                    "command_timeout",
+                    "statement_cache_size",
+                    "max_cached_statement_use_count",
+                    "max_cacheable_statement_size",
+                    "direct_tls",
+                }
+                filtered_params = {k: v for k, v in params.items() if k in asyncpg_safe_params}
+                new_query = urlencode(filtered_params)
+                self.DATABASE_URL = urlunparse(parsed._replace(query=new_query))
             else:
                 self.DATABASE_URL = db_url
 
