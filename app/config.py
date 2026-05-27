@@ -28,7 +28,11 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     @model_validator(mode="after")
-    def validate_security_settings(self):
+    def validate_and_format_settings(self):
+        # Convert standard postgresql:// to postgresql+asyncpg:// if needed
+        if self.DATABASE_URL.startswith("postgresql://"):
+            self.DATABASE_URL = self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+
         if self.SECRET_KEY:
             return self
         if self.ENVIRONMENT.lower() in {"production", "prod"}:
