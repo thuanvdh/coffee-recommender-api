@@ -29,11 +29,32 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_and_format_settings(self):
-        # Convert standard postgresql:// or postgres:// to postgresql+asyncpg:// if needed
-        if self.DATABASE_URL.startswith("postgres://"):
-            self.DATABASE_URL = self.DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
-        elif self.DATABASE_URL.startswith("postgresql://"):
-            self.DATABASE_URL = self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+        from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+
+        # 1. Format DATABASE_URL
+        if self.DATABASE_URL:
+            db_url = self.DATABASE_URL
+            if db_url.startswith("postgres://"):
+                db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif db_url.startswith("postgresql://"):
+                db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+            parsed = urlparse(db_url)
+            if parsed.query:
+                params = dict(parse_qsl(parsed.query))
+                if "sslmode" in params:
+                    params["ssl"] = params.pop("sslmode")
+                    new_query = urlencode(params)
+                    self.DATABASE_URL = urlunparse(parsed._replace(query=new_query))
+                else:
+                    self.DATABASE_URL = db_url
+            else:
+                self.DATABASE_URL = db_url
+
+        # 2. Format DATABASE_URL_SYNC
+        if self.DATABASE_URL_SYNC:
+            if self.DATABASE_URL_SYNC.startswith("postgres://"):
+                self.DATABASE_URL_SYNC = self.DATABASE_URL_SYNC.replace("postgres://", "postgresql://", 1)
 
         if self.SECRET_KEY:
             return self
