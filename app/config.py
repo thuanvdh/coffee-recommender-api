@@ -29,8 +29,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_and_format_settings(self):
-        # Convert standard postgresql:// to postgresql+asyncpg:// if needed
-        if self.DATABASE_URL.startswith("postgresql://"):
+        # Convert standard postgresql:// or postgres:// to postgresql+asyncpg:// if needed
+        if self.DATABASE_URL.startswith("postgres://"):
+            self.DATABASE_URL = self.DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif self.DATABASE_URL.startswith("postgresql://"):
             self.DATABASE_URL = self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
         if self.SECRET_KEY:
